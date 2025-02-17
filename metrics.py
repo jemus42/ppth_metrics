@@ -37,6 +37,7 @@ class MetricHandler(BaseHTTPRequestHandler):
             # System metrics
             metrics.append(f'ppth_system_cpu_percent {psutil.cpu_percent()}')
             metrics.append(f'ppth_system_memory_percent {psutil.virtual_memory().percent}')
+            metrics.append(f'ppth_system_cpu_package_temp {psutil.sensors_temperatures()["coretemp"][1].current}')
             
             # Add timestamps if you want them
             # timestamp = round(datetime.now().timestamp())
