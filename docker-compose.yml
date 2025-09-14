@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  metrics-exporter:
+    image: ghcr.io/jemus42/ppth_metrics:latest
+    container_name: metrics-exporter
+    restart: unless-stopped
+    ports:
+      - "${EXPORTER_PORT:-8000}:8000"
+    environment:
+      - TAUTULLI_URL=${TAUTULLI_URL:-http://tautulli:8181}
+      - TAUTULLI_API_KEY=${TAUTULLI_API_KEY}
+      - EXPORTER_PORT=${EXPORTER_PORT:-8000}
+      - EXPORTER_BIND_ADDRESS=${EXPORTER_BIND_ADDRESS:-0.0.0.0}
+    # Uncomment if you need to connect to Tautulli on the same Docker network
+    # networks:
+    #   - tautulli-network
+    # Uncomment for host network mode (useful for accessing host's Tautulli or getting host metrics)
+    # network_mode: host
+    
+# Uncomment if using a shared network with Tautulli
+# networks:
+#   tautulli-network:
+#     external: true
