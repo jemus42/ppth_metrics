@@ -1,6 +1,6 @@
 services:
   metrics-exporter:
-    image: ghcr.io/jemus42/ppth_metrics:latest
+    image: ghcr.io/jemus42/ppth_metrics:${VERSION:-0.1.0}
     container_name: metrics-exporter
     restart: unless-stopped
     ports:

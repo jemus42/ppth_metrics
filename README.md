@@ -115,5 +115,25 @@ uv run metrics.py
 ## Docker Image Tags
 
 - `latest` - Latest stable release from main/master branch
-- `v*.*.*` - Specific version tags (e.g., v1.0.0)
+- `0.1.0` - Current stable version
+- `v*.*.*` - Specific version tags (e.g., v0.1.0)
 - `main`/`master` - Latest commit from the main branch
+
+## Version Management
+
+To update to a specific version in TrueNAS Scale:
+
+1. **Set the VERSION environment variable:**
+   ```bash
+   VERSION=0.1.0
+   ```
+
+2. **Or update your .env file:**
+   ```bash
+   echo "VERSION=0.1.0" >> .env
+   ```
+
+3. **Pull the new version:**
+   ```bash
+   docker-compose pull && docker-compose up -d
+   ```
