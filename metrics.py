@@ -5,7 +5,6 @@ import json
 import requests
 from datetime import datetime
 import os
-import docker
 
 class MetricHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -15,7 +14,6 @@ class MetricHandler(BaseHTTPRequestHandler):
             # Get configuration from environment variables
             tautulli_url = os.getenv('TAUTULLI_URL', 'http://localhost:8181')
             tautulli_api_key = os.getenv('TAUTULLI_API_KEY', '')
-            enable_docker_metrics = os.getenv('ENABLE_DOCKER_METRICS', 'true').lower() == 'true'
             
             # Tautulli/Plex metrics
             if tautulli_api_key:
@@ -84,81 +82,6 @@ class MetricHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"Could not read CPU temperature: {e}")
 
-            # Docker container metrics
-            if enable_docker_metrics:
-                try:
-                    client = docker.from_env()
-                    containers = client.containers.list()
-
-                    for container in containers:
-                        try:
-                            stats = container.stats(stream=False)
-                            name = container.name
-                            image = container.image.tags[0] if container.image.tags else 'unknown'
-
-                            # CPU usage percentage
-                            cpu_percent = 0
-                            try:
-                                cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
-                                system_cpu_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
-
-                                # Get CPU count - try different methods
-                                online_cpus = stats['cpu_stats'].get('online_cpus')
-                                if not online_cpus and 'percpu_usage' in stats['cpu_stats']['cpu_usage']:
-                                    online_cpus = len(stats['cpu_stats']['cpu_usage']['percpu_usage'])
-                                if not online_cpus:
-                                    online_cpus = 1  # fallback
-
-                                if system_cpu_delta > 0 and cpu_delta > 0:
-                                    cpu_percent = (cpu_delta / system_cpu_delta) * online_cpus * 100.0
-                            except KeyError as e:
-                                print(f"CPU calculation error for {name}: missing {e}")
-
-                            # Only add HELP/TYPE once per metric name
-                            if 'docker_container_cpu_percent' not in '\n'.join(metrics):
-                                metrics.extend([
-                                    '# HELP docker_container_cpu_percent CPU usage percentage for container',
-                                    '# TYPE docker_container_cpu_percent gauge'
-                                ])
-                            metrics.append(f'docker_container_cpu_percent{{container="{name}",image="{image}"}} {cpu_percent:.2f}')
-
-                            # Memory usage
-                            memory_usage = stats['memory_stats']['usage']
-                            memory_limit = stats['memory_stats']['limit']
-                            memory_percent = (memory_usage / memory_limit) * 100 if memory_limit > 0 else 0
-
-                            if 'docker_container_memory_percent' not in '\n'.join(metrics):
-                                metrics.extend([
-                                    '# HELP docker_container_memory_percent Memory usage percentage for container',
-                                    '# TYPE docker_container_memory_percent gauge'
-                                ])
-                            metrics.append(f'docker_container_memory_percent{{container="{name}",image="{image}"}} {memory_percent:.2f}')
-
-                            # Network I/O (optional)
-                            if 'networks' in stats and stats['networks']:
-                                network_data = list(stats['networks'].values())[0]
-                                rx_bytes = network_data.get('rx_bytes', 0)
-                                tx_bytes = network_data.get('tx_bytes', 0)
-
-                                if 'docker_container_network_rx_bytes' not in '\n'.join(metrics):
-                                    metrics.extend([
-                                        '# HELP docker_container_network_rx_bytes Network bytes received',
-                                        '# TYPE docker_container_network_rx_bytes counter'
-                                    ])
-                                metrics.append(f'docker_container_network_rx_bytes{{container="{name}",image="{image}"}} {rx_bytes}')
-
-                                if 'docker_container_network_tx_bytes' not in '\n'.join(metrics):
-                                    metrics.extend([
-                                        '# HELP docker_container_network_tx_bytes Network bytes transmitted',
-                                        '# TYPE docker_container_network_tx_bytes counter'
-                                    ])
-                                metrics.append(f'docker_container_network_tx_bytes{{container="{name}",image="{image}"}} {tx_bytes}')
-
-                        except Exception as e:
-                            print(f"Error collecting stats for container {container.name}: {e}")
-
-                except Exception as e:
-                    print(f"Docker metrics error: {e}")
 
             # Add timestamps if you want them
             # timestamp = round(datetime.now().timestamp())

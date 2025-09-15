@@ -18,11 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY metrics.py .
 
-# Create non-root user but don't switch to it
-# Docker metrics require access to Docker socket which needs root or docker group
+# Create non-root user and switch to it
 RUN useradd -m -u 1000 exporter && chown -R exporter:exporter /app
-# Running as root for Docker socket access
-# USER exporter
+USER exporter
 
 # Expose metrics port
 EXPOSE 8000
