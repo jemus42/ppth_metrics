@@ -105,22 +105,25 @@ class MetricHandler(BaseHTTPRequestHandler):
                             if system_cpu_delta > 0 and cpu_delta > 0:
                                 cpu_percent = (cpu_delta / system_cpu_delta) * online_cpus * 100.0
 
-                            metrics.extend([
-                                f'# HELP docker_container_cpu_percent CPU usage percentage for container',
-                                f'# TYPE docker_container_cpu_percent gauge',
-                                f'docker_container_cpu_percent{{container="{name}",image="{image}"}} {cpu_percent:.2f}'
-                            ])
+                            # Only add HELP/TYPE once per metric name
+                            if 'docker_container_cpu_percent' not in '\n'.join(metrics):
+                                metrics.extend([
+                                    '# HELP docker_container_cpu_percent CPU usage percentage for container',
+                                    '# TYPE docker_container_cpu_percent gauge'
+                                ])
+                            metrics.append(f'docker_container_cpu_percent{{container="{name}",image="{image}"}} {cpu_percent:.2f}')
 
                             # Memory usage
                             memory_usage = stats['memory_stats']['usage']
                             memory_limit = stats['memory_stats']['limit']
                             memory_percent = (memory_usage / memory_limit) * 100 if memory_limit > 0 else 0
 
-                            metrics.extend([
-                                f'# HELP docker_container_memory_percent Memory usage percentage for container',
-                                f'# TYPE docker_container_memory_percent gauge',
-                                f'docker_container_memory_percent{{container="{name}",image="{image}"}} {memory_percent:.2f}'
-                            ])
+                            if 'docker_container_memory_percent' not in '\n'.join(metrics):
+                                metrics.extend([
+                                    '# HELP docker_container_memory_percent Memory usage percentage for container',
+                                    '# TYPE docker_container_memory_percent gauge'
+                                ])
+                            metrics.append(f'docker_container_memory_percent{{container="{name}",image="{image}"}} {memory_percent:.2f}')
 
                             # Network I/O (optional)
                             if 'networks' in stats and stats['networks']:
@@ -128,22 +131,25 @@ class MetricHandler(BaseHTTPRequestHandler):
                                 rx_bytes = network_data.get('rx_bytes', 0)
                                 tx_bytes = network_data.get('tx_bytes', 0)
 
-                                metrics.extend([
-                                    f'# HELP docker_container_network_rx_bytes Network bytes received',
-                                    f'# TYPE docker_container_network_rx_bytes counter',
-                                    f'docker_container_network_rx_bytes{{container="{name}",image="{image}"}} {rx_bytes}',
-                                    f'# HELP docker_container_network_tx_bytes Network bytes transmitted',
-                                    f'# TYPE docker_container_network_tx_bytes counter',
-                                    f'docker_container_network_tx_bytes{{container="{name}",image="{image}"}} {tx_bytes}'
-                                ])
+                                if 'docker_container_network_rx_bytes' not in '\n'.join(metrics):
+                                    metrics.extend([
+                                        '# HELP docker_container_network_rx_bytes Network bytes received',
+                                        '# TYPE docker_container_network_rx_bytes counter'
+                                    ])
+                                metrics.append(f'docker_container_network_rx_bytes{{container="{name}",image="{image}"}} {rx_bytes}')
+
+                                if 'docker_container_network_tx_bytes' not in '\n'.join(metrics):
+                                    metrics.extend([
+                                        '# HELP docker_container_network_tx_bytes Network bytes transmitted',
+                                        '# TYPE docker_container_network_tx_bytes counter'
+                                    ])
+                                metrics.append(f'docker_container_network_tx_bytes{{container="{name}",image="{image}"}} {tx_bytes}')
 
                         except Exception as e:
                             print(f"Error collecting stats for container {container.name}: {e}")
 
                 except Exception as e:
                     print(f"Docker metrics error: {e}")
-            else:
-                print("Docker metrics disabled")
 
             # Add timestamps if you want them
             # timestamp = round(datetime.now().timestamp())
