@@ -97,13 +97,22 @@ class MetricHandler(BaseHTTPRequestHandler):
                             image = container.image.tags[0] if container.image.tags else 'unknown'
 
                             # CPU usage percentage
-                            cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
-                            system_cpu_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
-                            online_cpus = stats['cpu_stats'].get('online_cpus', len(stats['cpu_stats']['cpu_usage']['percpu_usage']))
-
                             cpu_percent = 0
-                            if system_cpu_delta > 0 and cpu_delta > 0:
-                                cpu_percent = (cpu_delta / system_cpu_delta) * online_cpus * 100.0
+                            try:
+                                cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
+                                system_cpu_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
+
+                                # Get CPU count - try different methods
+                                online_cpus = stats['cpu_stats'].get('online_cpus')
+                                if not online_cpus and 'percpu_usage' in stats['cpu_stats']['cpu_usage']:
+                                    online_cpus = len(stats['cpu_stats']['cpu_usage']['percpu_usage'])
+                                if not online_cpus:
+                                    online_cpus = 1  # fallback
+
+                                if system_cpu_delta > 0 and cpu_delta > 0:
+                                    cpu_percent = (cpu_delta / system_cpu_delta) * online_cpus * 100.0
+                            except KeyError as e:
+                                print(f"CPU calculation error for {name}: missing {e}")
 
                             # Only add HELP/TYPE once per metric name
                             if 'docker_container_cpu_percent' not in '\n'.join(metrics):
