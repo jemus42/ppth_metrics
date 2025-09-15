@@ -10,6 +10,9 @@ services:
       TAUTULLI_API_KEY: ${TAUTULLI_API_KEY}
       EXPORTER_PORT: ${EXPORTER_PORT:-8000}
       EXPORTER_BIND_ADDRESS: ${EXPORTER_BIND_ADDRESS:-0.0.0.0}
+      ENABLE_DOCKER_METRICS: ${ENABLE_DOCKER_METRICS:-true}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     # Uncomment if you need to connect to Tautulli on the same Docker network
     # networks:
     #   - tautulli-network
