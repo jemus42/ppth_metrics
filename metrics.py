@@ -119,7 +119,7 @@ class MetricHandler(BaseHTTPRequestHandler):
                             plex_platform = server_data.get('pms_platform', 'unknown')
                             metrics.extend([
                                 '# HELP plex_server_info Plex server information',
-                                '# TYPE plex_server_info info',
+                                '# TYPE plex_server_info gauge',
                                 f'plex_server_info{{version="{plex_version}",platform="{plex_platform}"}} 1'
                             ])
 

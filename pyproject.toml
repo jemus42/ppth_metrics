@@ -1,6 +1,6 @@
 [project]
 name = "ppth-metrics"
-version = "0.3.0"
+version = "0.3.1"
 description = "Prometheus exporter for system metrics and Tautulli/Plex streaming metrics"
 readme = "README.md"
 requires-python = ">=3.11"
