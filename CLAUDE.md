@@ -4,16 +4,22 @@ This file contains instructions for Claude Code when working on this project.
 
 ## Project Overview
 
-This is a Prometheus metrics exporter that collects:
-- System metrics (CPU, memory, temperature)
-- Tautulli/Plex streaming metrics
-- Docker container resource metrics (CPU, memory, network)
+Prometheus exporter for the PPTH home server. Collects:
+
+- System metrics (CPU%, memory%, CPU package temp)
+- ZFS metrics (per-dataset used/avail/referenced bytes, ARC size + ceiling + hits/misses)
+- Tautulli/Plex streaming metrics — **opt-in** via `ENABLE_TAUTULLI=true`; emits a `ppth_tautulli_up` gauge whenever enabled so a broken upstream is observable as 0, not silent absence
+
+Jellyfin session / transcode / item-count metrics are deliberately **not** here — the community `drkhsh/jellyfin-exporter` already covers them on PPTH. See the vault note `infra/ppth/Jellyfin monitoring design.md` for the scope split.
+
+Docker container resource metrics existed briefly in v0.1.x (commit `b365669` "Remove docker stuff b/c too slow") and were removed. Don't re-add without checking that commit's rationale.
 
 ## Version Management
 
 ### Current Version
-- Current version is stored in the `VERSION` file
-- Latest stable version: `0.1.0`
+
+- Stored in the `VERSION` file (and mirrored in `pyproject.toml`)
+- Latest stable version: see `VERSION`
 
 ### Creating New Versions
 
@@ -58,12 +64,18 @@ Use semantic versioning (MAJOR.MINOR.PATCH):
 
 ### Local Development
 ```bash
-# Without Docker metrics (no permission issues)
-EXPORTER_PORT=8005 ENABLE_DOCKER_METRICS=false uv run metrics.py
+# Run on a non-prod port. ZFS/ARC need the kernel surfaces to exist (Linux + ZFS).
+EXPORTER_PORT=8005 uv run python metrics.py
 
-# With Docker metrics (requires sudo or docker group)
-sudo EXPORTER_PORT=8005 ENABLE_DOCKER_METRICS=true uv run metrics.py
+# Enable Tautulli probe (defaults off; emits ppth_tautulli_up regardless of reachability)
+EXPORTER_PORT=8005 ENABLE_TAUTULLI=true TAUTULLI_URL=https://... TAUTULLI_API_KEY=... uv run python metrics.py
 ```
+
+### Tests
+```bash
+uv run --group dev pytest tests/ -v
+```
+Parsers (`parse_zfs_list_output`, `parse_arcstats`) are pure functions covered by fixtures captured from PPTH. The HTTP layer is not unit-tested — verify via `curl -4 http://127.0.0.1:8005/metrics` (note the `-4`: `localhost` over IPv6 fails because the docker-proxy is v4-only on TrueNAS Scale).
 
 ### Docker Development
 ```bash
@@ -75,42 +87,23 @@ docker-compose -f docker-compose.local.yml up -d
 docker-compose up -d
 ```
 
-### Testing
-```bash
-# Test metrics endpoint
-curl -4 http://localhost:8000/metrics
-
-# Check for Docker metrics
-curl -4 http://localhost:8000/metrics | grep docker_container
-
-# Check for all metric types
-curl -4 http://localhost:8000/metrics | grep "# TYPE"
-```
-
 ## Important Notes
 
-### Docker Configuration
-- Container runs as root for Docker socket access
-- Requires `/var/run/docker.sock:/var/run/docker.sock:ro` volume mount
-- Uses proper error handling for missing CPU stats (common issue)
-
 ### TrueNAS Scale Deployment
-- Uses `ghcr.io/jemus42/ppth_metrics:latest` by default
-- Can pin to specific versions with `VERSION` environment variable
-- Requires Docker socket access for container metrics
+- Image: `ghcr.io/jemus42/ppth_metrics:<tag>`. App is `prometheus-ppth` under TrueNAS Apps.
+- ZFS metrics depend on the container being able to run `zfs list` and read `/proc/spl/kstat/zfs/arcstats`. The current app runs privileged enough for both; if either fails the collector logs and skips its block (the rest of the endpoint stays healthy).
+- Tautulli stays off unless `ENABLE_TAUTULLI=true` is set in the app's env config.
 
 ### Metrics Format
-- All metrics include proper Prometheus TYPE and HELP annotations
-- Output ends with trailing newline (POSIX compliant)
-- Docker metrics include container and image labels
+- Manual text-format string-building, not the `prometheus_client` library. Keep `# HELP` / `# TYPE` lines, gauge vs counter naming convention (`_total` suffix for counters).
+- Output ends with a trailing newline (POSIX).
 
 ## Environment Variables
 
 | Variable | Default | Description |
-|----------|---------|-------------|
-| `TAUTULLI_URL` | `http://localhost:8181` | Tautulli instance URL |
-| `TAUTULLI_API_KEY` | (none) | Tautulli API key |
+|---|---|---|
 | `EXPORTER_PORT` | `8000` | Port to expose metrics |
 | `EXPORTER_BIND_ADDRESS` | `0.0.0.0` | Bind address |
-| `ENABLE_DOCKER_METRICS` | `true` | Enable Docker metrics |
-| `VERSION` | `latest` | Docker image version |
+| `ENABLE_TAUTULLI` | `false` | Opt-in for the Tautulli scrape. When true, emits `ppth_tautulli_up` regardless of result. |
+| `TAUTULLI_URL` | `http://localhost:8181` | Tautulli instance URL (only consulted when ENABLE_TAUTULLI is set) |
+| `TAUTULLI_API_KEY` | (none) | Tautulli API key (only consulted when ENABLE_TAUTULLI is set) |

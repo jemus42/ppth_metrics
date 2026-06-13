@@ -1,10 +1,15 @@
 [project]
 name = "ppth-metrics"
-version = "0.3.1"
-description = "Prometheus exporter for system metrics and Tautulli/Plex streaming metrics"
+version = "0.4.0"
+description = "Prometheus exporter for PPTH: system + ZFS + ARC, with optional Tautulli/Plex"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "psutil==5.9.8",
     "requests==2.31.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
 ]

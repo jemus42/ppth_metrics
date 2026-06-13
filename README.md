@@ -1,139 +1,78 @@
 # PPTH Metrics Exporter
 
-A Prometheus exporter that collects system metrics and Tautulli/Plex streaming metrics.
+Prometheus exporter for the PPTH home server. Emits ZFS / ARC / system metrics plus an optional Tautulli scrape.
 
-## Features
+## What it exports
 
-- System metrics (CPU usage, memory usage, CPU temperature)
-- Tautulli/Plex streaming metrics (total streams, direct play, direct stream, transcode)
-- Prometheus-compatible output with TYPE and HELP annotations
-- Docker support for easy deployment
-- Environment variable configuration
-- Multi-architecture Docker images (amd64, arm64)
+### System
+- `ppth_system_cpu_percent` — gauge, CPU usage %
+- `ppth_system_memory_percent` — gauge, RAM usage %. On a ZFS host this looks alarmingly high; pair with the ARC gauges below for the real picture.
+- `ppth_system_cpu_package_temp` — gauge, CPU package °C (when `sensors_temperatures()` returns `coretemp`)
 
-## Quick Start
+### ZFS — per-dataset
+- `ppth_zfs_used_bytes{dataset="..."}` — gauge
+- `ppth_zfs_avail_bytes{dataset="..."}` — gauge
+- `ppth_zfs_referenced_bytes{dataset="..."}` — gauge
 
-### Using Pre-built Docker Image (Recommended)
+### ZFS — ARC (read-cache state)
+- `ppth_zfs_arc_size_bytes` — current footprint
+- `ppth_zfs_arc_c_max_bytes` — RAM ceiling the ARC may grow to
+- `ppth_zfs_arc_c_bytes` — current auto-tuned target size
+- `ppth_zfs_arc_data_size_bytes`, `ppth_zfs_arc_metadata_size_bytes` — split of `size`
+- `ppth_zfs_arc_hits_total`, `ppth_zfs_arc_misses_total` — cumulative counters
 
-1. Copy the environment file and configure it:
-```bash
-cp .env.example .env
-# Edit .env with your Tautulli URL and API key
-```
+The `size` vs `c_max` ratio is the useful one: it tells you how full the ARC is relative to its allowed maximum.
 
-2. Run with the pre-built image:
-```bash
-docker-compose up -d
-```
+### Tautulli/Plex (opt-in)
+Off by default. Set `ENABLE_TAUTULLI=true` to enable.
 
-3. Access metrics at: `http://localhost:8000/metrics`
-
-### Local Development
-
-For local development with building from source:
-```bash
-docker-compose -f docker-compose.local.yml up --build
-```
+- `ppth_tautulli_up{instance="..."}` — gauge, `1` if the scrape returned 200, else `0`. Emitted **whenever the integration is enabled**, regardless of upstream health, so a broken Tautulli is observable rather than silent.
+- `plex_streams_total`, `plex_streams_direct_play`, `plex_streams_direct_stream`, `plex_streams_transcode` — gauges, only emitted when `up == 1`.
 
 ## Configuration
 
-All configuration is done via environment variables:
+| Variable | Default | Description |
+|---|---|---|
+| `EXPORTER_PORT` | `8000` | Port to expose metrics |
+| `EXPORTER_BIND_ADDRESS` | `0.0.0.0` | Bind address |
+| `ENABLE_TAUTULLI` | `false` | Opt-in for the Tautulli scrape |
+| `TAUTULLI_URL` | `http://localhost:8181` | Tautulli URL (consulted only when enabled) |
+| `TAUTULLI_API_KEY` | (none) | Tautulli API key (consulted only when enabled) |
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TAUTULLI_URL` | URL of your Tautulli instance | `http://localhost:8181` |
-| `TAUTULLI_API_KEY` | API key from Tautulli settings | (none - Plex metrics disabled) |
-| `EXPORTER_PORT` | Port to expose metrics | `8000` |
-| `EXPORTER_BIND_ADDRESS` | Bind address for the exporter | `0.0.0.0` |
+## Running
 
-## Deployment on TrueNAS Scale
-
-For TrueNAS Scale custom app deployment:
-
-1. Use the pre-built Docker image from GitHub Container Registry:
-   - Image: `ghcr.io/jemus42/ppth_metrics:latest`
-   
-2. Set environment variables through the TrueNAS UI:
-   - `TAUTULLI_URL`: Your Tautulli instance URL
-   - `TAUTULLI_API_KEY`: Your Tautulli API key
-   - `EXPORTER_PORT`: Port for metrics (default 8000)
-
-3. Map port 8000 (or your chosen port) to access metrics
-
-4. Consider using host networking if you need to:
-   - Access a Tautulli instance running on the host
-   - Get accurate host system metrics (CPU temp may not work in containers)
-
-## Publishing to GitHub Container Registry
-
-This repository includes GitHub Actions to automatically build and publish Docker images:
-
-1. Push your code to GitHub:
+### Pre-built image (recommended)
 ```bash
-git remote add origin https://github.com/jemus42/ppth_metrics.git
-git push -u origin main
+docker-compose up -d
+# metrics at http://localhost:8000/metrics
 ```
 
-2. The image will be automatically built and published on:
-   - Every push to main/master branch (tagged as `latest`)
-   - Every tag push (e.g., `v1.0.0`)
-
-3. Make the package public in your GitHub package settings for anonymous pulls
-
-The workflow builds multi-architecture images (amd64 and arm64) for broad compatibility.
-
-## Metrics Exported
-
-### Plex/Tautulli Metrics
-- `plex_streams_total` - Total number of active Plex streams
-- `plex_streams_direct_play` - Number of streams using direct play
-- `plex_streams_direct_stream` - Number of streams using direct stream
-- `plex_streams_transcode` - Number of streams using transcoding
-
-### System Metrics
-- `ppth_system_cpu_percent` - CPU usage percentage
-- `ppth_system_memory_percent` - Memory usage percentage
-- `ppth_system_cpu_package_temp` - CPU package temperature in Celsius (if available)
-
-## Development
-
-Run locally with Python:
+### Local development
 ```bash
-pip install -r requirements.txt
-export TAUTULLI_API_KEY=your_api_key_here
-export TAUTULLI_URL=http://your-tautulli:8181
-python metrics.py
+EXPORTER_PORT=8005 uv run python metrics.py
+curl -4 http://127.0.0.1:8005/metrics
 ```
+The `-4` matters on TrueNAS Scale: `localhost` over IPv6 hits the docker-proxy on a non-bound interface and fails.
 
-Or with uv:
+### Tests
 ```bash
-export TAUTULLI_API_KEY=your_api_key_here
-export TAUTULLI_URL=http://your-tautulli:8181
-uv run metrics.py
+uv run --group dev pytest tests/ -v
 ```
+Parsers are unit-tested against real captures from PPTH. The HTTP layer is verified by hand with `curl`.
 
-## Docker Image Tags
+## TrueNAS Scale deployment
 
-- `latest` - Latest stable release from main/master branch
-- `0.1.0` - Current stable version
-- `v*.*.*` - Specific version tags (e.g., v0.1.0)
-- `main`/`master` - Latest commit from the main branch
+Image: `ghcr.io/jemus42/ppth_metrics:<tag>`. Deployed as the `prometheus-ppth` custom app. ZFS metrics require the container to be able to `zfs list` and read `/proc/spl/kstat/zfs/arcstats` — the current app config grants that; if either fails the collector logs and skips its block while the rest of the endpoint stays healthy.
 
-## Version Management
+## Releasing
 
-To update to a specific version in TrueNAS Scale:
+1. `echo "X.Y.Z" > VERSION` and bump `version` in `pyproject.toml`
+2. `git commit -am "Release vX.Y.Z - ..."`
+3. `git tag vX.Y.Z && git push --tags origin main`
+4. GitHub Actions builds and publishes multi-arch images to `ghcr.io/jemus42/ppth_metrics:{latest,X.Y.Z,vX.Y.Z}`
 
-1. **Set the VERSION environment variable:**
-   ```bash
-   VERSION=0.1.0
-   ```
+Semver: MAJOR = breaking metric/config; MINOR = new metrics or env vars; PATCH = bug fixes.
 
-2. **Or update your .env file:**
-   ```bash
-   echo "VERSION=0.1.0" >> .env
-   ```
+## Scope
 
-3. **Pull the new version:**
-   ```bash
-   docker-compose pull && docker-compose up -d
-   ```
+Jellyfin session / transcode / item-count metrics are **not** in scope here — the community `drkhsh/jellyfin-exporter` already covers them on PPTH. The next thing this exporter wants is per-library byte counts (mtime-gated filesystem walk under `/mnt/Primary/media/`); see the vault note `infra/ppth/Jellyfin monitoring design.md`.
