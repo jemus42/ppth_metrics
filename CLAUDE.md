@@ -7,12 +7,14 @@ This file contains instructions for Claude Code when working on this project.
 Prometheus exporter for the PPTH home server. Collects:
 
 - System metrics (CPU%, memory%, CPU package temp)
-- ZFS metrics (per-dataset used/avail/referenced bytes, ARC size + ceiling + hits/misses)
+- ZFS ARC metrics (size, c_max, c, data/metadata split, hits/misses) read from `/proc/spl/kstat/zfs/arcstats` — no userland binary required
 - Tautulli/Plex streaming metrics — **opt-in** via `ENABLE_TAUTULLI=true`; emits a `ppth_tautulli_up` gauge whenever enabled so a broken upstream is observable as 0, not silent absence
 
 Jellyfin session / transcode / item-count metrics are deliberately **not** here — the community `drkhsh/jellyfin-exporter` already covers them on PPTH. See the vault note `infra/ppth/Jellyfin monitoring design.md` for the scope split.
 
 Docker container resource metrics existed briefly in v0.1.x (commit `b365669` "Remove docker stuff b/c too slow") and were removed. Don't re-add without checking that commit's rationale.
+
+Per-dataset ZFS bytes (`zfs list`) were attempted in v0.4.0 and removed in v0.4.1: the `zfs` userland needs to version-match the host kmod (PPTH: ZFS 2.3.4; Debian slim ships 2.1.x). Per-library byte tracking — the actual goal — is a filesystem-walk job, not a ZFS one. Don't re-add `zfs list` without solving the version coupling first (bind-mount host binary + libs, or rebase the image on a distro with matching ZFS).
 
 ## Version Management
 
@@ -91,7 +93,7 @@ docker-compose up -d
 
 ### TrueNAS Scale Deployment
 - Image: `ghcr.io/jemus42/ppth_metrics:<tag>`. App is `prometheus-ppth` under TrueNAS Apps.
-- ZFS metrics depend on the container being able to run `zfs list` and read `/proc/spl/kstat/zfs/arcstats`. The current app runs privileged enough for both; if either fails the collector logs and skips its block (the rest of the endpoint stays healthy).
+- ARC metrics work in any container with the default `/proc` mount. No extra device passthrough or privileged mode.
 - Tautulli stays off unless `ENABLE_TAUTULLI=true` is set in the app's env config.
 
 ### Metrics Format

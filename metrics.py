@@ -1,31 +1,10 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import subprocess
 import psutil
 import requests
 import os
 
 
 # ─── Parsers (pure functions, unit-tested) ──────────────────────────────────
-
-def parse_zfs_list_output(text):
-    """Parse `zfs list -p -H -o name,used,avail,referenced` tab-separated output.
-
-    Returns a list of dicts. Skips blank lines so trailing newlines don't
-    produce an empty trailing row.
-    """
-    rows = []
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        name, used, avail, referenced = line.split("\t")
-        rows.append({
-            "name": name,
-            "used": int(used),
-            "avail": int(avail),
-            "referenced": int(referenced),
-        })
-    return rows
-
 
 def parse_arcstats(text):
     """Parse /proc/spl/kstat/zfs/arcstats — two-line preamble then `name type value`.
@@ -68,33 +47,16 @@ def collect_system():
     return lines
 
 
-def collect_zfs():
-    """Per-dataset bytes and ARC stats. Pure shell-out + file read, no API."""
-    lines = []
-    try:
-        out = subprocess.check_output(
-            ["zfs", "list", "-p", "-H", "-o", "name,used,avail,referenced"],
-            text=True, timeout=5,
-        )
-        rows = parse_zfs_list_output(out)
-        lines += [
-            "# HELP ppth_zfs_used_bytes Bytes used by the dataset",
-            "# TYPE ppth_zfs_used_bytes gauge",
-        ]
-        lines += [f'ppth_zfs_used_bytes{{dataset="{r["name"]}"}} {r["used"]}' for r in rows]
-        lines += [
-            "# HELP ppth_zfs_avail_bytes Bytes available in the dataset's pool",
-            "# TYPE ppth_zfs_avail_bytes gauge",
-        ]
-        lines += [f'ppth_zfs_avail_bytes{{dataset="{r["name"]}"}} {r["avail"]}' for r in rows]
-        lines += [
-            "# HELP ppth_zfs_referenced_bytes Bytes referenced by the dataset",
-            "# TYPE ppth_zfs_referenced_bytes gauge",
-        ]
-        lines += [f'ppth_zfs_referenced_bytes{{dataset="{r["name"]}"}} {r["referenced"]}' for r in rows]
-    except Exception as e:
-        print(f"zfs list failed: {e}")
+def collect_zfs_arc():
+    """ZFS ARC stats from /proc/spl/kstat/zfs/arcstats — no userland binary needed.
 
+    Per-dataset bytes (used/avail/referenced) intentionally not collected: would
+    require shelling out to `zfs list`, which couples this container's userland
+    to the host's kmod version. Per-library byte tracking is the goal anyway,
+    and that's a filesystem-walk job (see infra/ppth/Jellyfin monitoring design
+    in the vault) — not a ZFS one.
+    """
+    lines = []
     try:
         with open("/proc/spl/kstat/zfs/arcstats") as f:
             stats = parse_arcstats(f.read())
@@ -180,7 +142,7 @@ class MetricHandler(BaseHTTPRequestHandler):
             return
         metrics = []
         metrics += collect_system()
-        metrics += collect_zfs()
+        metrics += collect_zfs_arc()
         metrics += collect_tautulli()
         self.send_response(200)
         self.send_header("Content-type", "text/plain")

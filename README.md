@@ -9,11 +9,6 @@ Prometheus exporter for the PPTH home server. Emits ZFS / ARC / system metrics p
 - `ppth_system_memory_percent` — gauge, RAM usage %. On a ZFS host this looks alarmingly high; pair with the ARC gauges below for the real picture.
 - `ppth_system_cpu_package_temp` — gauge, CPU package °C (when `sensors_temperatures()` returns `coretemp`)
 
-### ZFS — per-dataset
-- `ppth_zfs_used_bytes{dataset="..."}` — gauge
-- `ppth_zfs_avail_bytes{dataset="..."}` — gauge
-- `ppth_zfs_referenced_bytes{dataset="..."}` — gauge
-
 ### ZFS — ARC (read-cache state)
 - `ppth_zfs_arc_size_bytes` — current footprint
 - `ppth_zfs_arc_c_max_bytes` — RAM ceiling the ARC may grow to
@@ -62,7 +57,7 @@ Parsers are unit-tested against real captures from PPTH. The HTTP layer is verif
 
 ## TrueNAS Scale deployment
 
-Image: `ghcr.io/jemus42/ppth_metrics:<tag>`. Deployed as the `prometheus-ppth` custom app. ZFS metrics require the container to be able to `zfs list` and read `/proc/spl/kstat/zfs/arcstats` — the current app config grants that; if either fails the collector logs and skips its block while the rest of the endpoint stays healthy.
+Image: `ghcr.io/jemus42/ppth_metrics:<tag>`. Deployed as the `prometheus-ppth` custom app. ARC metrics work out of the box — `/proc/spl/kstat/zfs/arcstats` is visible to any container with the default `/proc` mount. No extra device passthrough or privileged mode needed.
 
 ## Releasing
 
@@ -75,4 +70,8 @@ Semver: MAJOR = breaking metric/config; MINOR = new metrics or env vars; PATCH =
 
 ## Scope
 
-Jellyfin session / transcode / item-count metrics are **not** in scope here — the community `drkhsh/jellyfin-exporter` already covers them on PPTH. The next thing this exporter wants is per-library byte counts (mtime-gated filesystem walk under `/mnt/Primary/media/`); see the vault note `infra/ppth/Jellyfin monitoring design.md`.
+Jellyfin session / transcode / item-count metrics are **not** in scope here — the community `drkhsh/jellyfin-exporter` already covers them on PPTH.
+
+Per-dataset ZFS bytes (used/avail/referenced) are also **not** in scope: a v0.4.0 attempt shelled out to `zfs list`, which requires a `zfsutils-linux` userland version-matched to the host kmod (PPTH runs ZFS 2.3.4; Debian slim ships 2.1.x — incompatible). Pool capacity is generally interesting but insufficient anyway, since the actual question is per-library bytes (movies vs tvshows vs anime vs …). That comes from a filesystem walk, not a ZFS query.
+
+The next thing this exporter wants is **per-library byte counts** via an mtime-gated `diskus` walk under `/mnt/Primary/media/`; see the vault note `infra/ppth/Jellyfin monitoring design.md`.

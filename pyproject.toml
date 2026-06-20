@@ -1,6 +1,6 @@
 [project]
 name = "ppth-metrics"
-version = "0.4.0"
+version = "0.4.1"
 description = "Prometheus exporter for PPTH: system + ZFS + ARC, with optional Tautulli/Plex"
 readme = "README.md"
 requires-python = ">=3.11"
