@@ -27,15 +27,17 @@ Per-dataset ZFS bytes (`zfs list`) were attempted in v0.4.0 and removed in v0.4.
 
 When implementing significant changes or fixes:
 
-1. **Update the VERSION file:**
+1. **Bump VERSION + pyproject.toml together** (both are sources of truth — VERSION is read by the image at runtime, `pyproject.toml`'s `version` is read by uv/pip):
    ```bash
-   echo "0.2.0" > VERSION
+   echo "X.Y.Z" > VERSION
+   # then edit pyproject.toml: version = "X.Y.Z"
+   uv lock          # regenerates uv.lock with the new version
    ```
 
 2. **Commit changes:**
    ```bash
    git add -A
-   git commit -m "Release 0.2.0 - [describe changes]
+   git commit -m "Release X.Y.Z - [describe changes]
 
    🤖 Generated with [Claude Code](https://claude.ai/code)
 
@@ -44,7 +46,7 @@ When implementing significant changes or fixes:
 
 3. **Create and push git tag:**
    ```bash
-   git tag v0.2.0
+   git tag vX.Y.Z
    git push --tags origin main
    ```
 
@@ -52,8 +54,8 @@ When implementing significant changes or fixes:
    - Build multi-architecture Docker images (amd64, arm64)
    - Publish to `ghcr.io/jemus42/ppth_metrics` with tags:
      - `latest`
-     - `0.2.0`
-     - `v0.2.0`
+     - `X.Y.Z`
+     - `vX.Y.Z`
 
 ### Version Semantics
 
@@ -77,7 +79,7 @@ EXPORTER_PORT=8005 ENABLE_TAUTULLI=true TAUTULLI_URL=https://... TAUTULLI_API_KE
 ```bash
 uv run --group dev pytest tests/ -v
 ```
-Parsers (`parse_zfs_list_output`, `parse_arcstats`) are pure functions covered by fixtures captured from PPTH. The HTTP layer is not unit-tested — verify via `curl -4 http://127.0.0.1:8005/metrics` (note the `-4`: `localhost` over IPv6 fails because the docker-proxy is v4-only on TrueNAS Scale).
+`parse_arcstats` is a pure function covered by a fixture captured from PPTH. The HTTP layer is not unit-tested — verify via `curl -4 http://127.0.0.1:8005/metrics` (note the `-4`: `localhost` over IPv6 fails because the docker-proxy is v4-only on TrueNAS Scale).
 
 ### Docker Development
 ```bash
